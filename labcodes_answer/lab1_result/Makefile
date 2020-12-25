@@ -1,9 +1,9 @@
-PROJ	:= challenge
+PROJ	:= challenge  # 直接赋值
 EMPTY	:=
-SPACE	:= $(EMPTY) $(EMPTY)
+SPACE	:= $(EMPTY) $(EMPTY)  # $符号用于扩展打开Makefile中定义的符号
 SLASH	:= /
 
-V       := @
+V       := @  # 符号，用在规则行中，不显示命令本身，只显示命令的结果
 
 # try to infer the correct GCCPREFX
 ifndef GCCPREFIX
@@ -41,18 +41,19 @@ endif
 .DELETE_ON_ERROR:
 
 # define compiler and flags
+# 其实这里就是变量的定义
 
 HOSTCC		:= gcc
-HOSTCFLAGS	:= -g -Wall -O2
+HOSTCFLAGS	:= -g -Wall -O2  # 带调试，编译后显示所有的警告，-O2是某一个优化级别的参数
 
 CC		:= $(GCCPREFIX)gcc
-CFLAGS	:= -fno-builtin -fno-PIC -Wall -ggdb -m32 -gstabs -nostdinc $(DEFS)
+CFLAGS	:= -fno-builtin -fno-PIC -Wall -ggdb -m32 -gstabs -nostdinc $(DEFS)  # 若干的编译参数
 CFLAGS	+= $(shell $(CC) -fno-stack-protector -E -x c /dev/null >/dev/null 2>&1 && echo -fno-stack-protector)
 CTYPE	:= c S
 
-LD      := $(GCCPREFIX)ld
+LD      := $(GCCPREFIX)ld  # 链接程序
 LDFLAGS	:= -m $(shell $(LD) -V | grep elf_i386 2>/dev/null | head -n 1)
-LDFLAGS	+= -nostdlib
+LDFLAGS	+= -nostdlib  # 非标准库
 
 OBJCOPY := $(GCCPREFIX)objcopy
 OBJDUMP := $(GCCPREFIX)objdump
@@ -76,6 +77,9 @@ TARGETS	:=
 
 include tools/function.mk
 
+# reverse=$(1)$(2)
+# foo=$(call reverse,a,b)
+# 那么foo的值就是a,b
 listf_cc = $(call listf,$(1),$(CTYPE))
 
 # for cc
@@ -142,7 +146,7 @@ $(call create_target,kernel)
 
 # -------------------------------------------------------------------
 
-# create bootblock
+# create bootblock，是一个虚拟的BootLoader
 bootfiles = $(call listf_cc,boot)
 $(foreach f,$(bootfiles),$(call cc_compile,$(f),$(CC),$(CFLAGS) -Os -nostdinc))
 
@@ -167,11 +171,19 @@ $(call create_target_host,sign,sign)
 # -------------------------------------------------------------------
 
 # create ucore.img
+# 依赖于kernel与bootblock
+# ucore.img 是被qemu访问的虚拟磁盘镜像
+# kernel: ELF格式的toy ucore kernel执行文，被嵌入到了ucore.img中
+# bootblock: 虚拟的硬盘主引导扇区（512字节），包含了bootloader执行代码，被嵌入到了ucore.img中
+# 嵌入的过程：是dd命令的操作， 读取设备文件中的内容并复制到指定位置
 UCOREIMG	:= $(call totarget,ucore.img)
 
 $(UCOREIMG): $(kernel) $(bootblock)
+	# 生成一个有10000个块的文件，每个块默认512字节，用0填充
 	$(V)dd if=/dev/zero of=$@ count=10000
+	# 把bootblock中的内容写到第一个块
 	$(V)dd if=$(bootblock) of=$@ conv=notrunc
+	# 从第二个块开始写kernel中的内容
 	$(V)dd if=$(kernel) of=$@ seek=1 conv=notrunc
 
 $(call create_target,ucore.img)
@@ -197,6 +209,7 @@ TARGETS: $(TARGETS)
 all: $(TARGETS)
 .DEFAULT_GOAL := TARGETS
 
+# 类似于make clean使make带参数去做一些工作的
 .PHONY: qemu qemu-nox debug debug-nox
 lab1-mon: $(UCOREIMG)
 	$(V)$(TERMINAL) -e "$(QEMU) -S -s -d in_asm -D $(BINDIR)/q.log -monitor stdio -hda $< -serial null"

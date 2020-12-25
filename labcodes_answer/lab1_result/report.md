@@ -163,8 +163,9 @@ target remote :1234
 
 2 在 lab1目录下，执行
 ```
-make debug
+make debug 
 ```
+该命令会根据gdbinit，在gdb起来的时候就去执行gdbinit中的语句
 
 3 在看到gdb的调试界面(gdb)后，在gdb调试界面下执行如下命令
 ```
