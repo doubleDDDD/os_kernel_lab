@@ -62,11 +62,11 @@ SYS_getpid      : get the process's pid
 list_entry_t proc_list;
 
 #define HASH_SHIFT          10
-#define HASH_LIST_SIZE      (1 << HASH_SHIFT)
+#define HASH_LIST_SIZE      (1 << HASH_SHIFT)  //1024
 #define pid_hashfn(x)       (hash32(x, HASH_SHIFT))
 
 // has list for process set based on pid
-static list_entry_t hash_list[HASH_LIST_SIZE];
+static list_entry_t hash_list[HASH_LIST_SIZE];  //这是一个结构体的数组哦
 
 // idle proc
 struct proc_struct *idleproc = NULL;
@@ -84,6 +84,7 @@ void switch_to(struct context *from, struct context *to);
 // alloc_proc - alloc a proc_struct and init all fields of proc_struct
 static struct proc_struct *
 alloc_proc(void) {
+    // 分配一个进程描述符，即PCB控制块
     struct proc_struct *proc = kmalloc(sizeof(struct proc_struct));
     if (proc != NULL) {
     //LAB4:EXERCISE1 YOUR CODE
@@ -102,18 +103,18 @@ alloc_proc(void) {
      *       uint32_t flags;                             // Process flag
      *       char name[PROC_NAME_LEN + 1];               // Process name
      */
-        proc->state = PROC_UNINIT;
-        proc->pid = -1;
-        proc->runs = 0;
-        proc->kstack = 0;
-        proc->need_resched = 0;
-        proc->parent = NULL;
-        proc->mm = NULL;
-        memset(&(proc->context), 0, sizeof(struct context));
-        proc->tf = NULL;
-        proc->cr3 = boot_cr3;
-        proc->flags = 0;
-        memset(proc->name, 0, PROC_NAME_LEN);
+        proc->state = PROC_UNINIT;  //线程状态，未初始化好坏
+        proc->pid = -1;  //线程号初始化为-1
+        proc->runs = 0;  //线程的运行时间
+        proc->kstack = 0;  //内核栈初始化为0
+        proc->need_resched = 0;  //是否需要被重新调度
+        proc->parent = NULL;  // 父进程
+        proc->mm = NULL;  // 内存描述符mm
+        memset(&(proc->context), 0, sizeof(struct context));  //
+        proc->tf = NULL;  //
+        proc->cr3 = boot_cr3;  //页表的基址
+        proc->flags = 0;  //
+        memset(proc->name, 0, PROC_NAME_LEN);  //
     }
     return proc;
 }
@@ -369,24 +370,27 @@ void
 proc_init(void) {
     int i;
 
-    list_init(&proc_list);
+    list_init(&proc_list);  //线程的链表头
     for (i = 0; i < HASH_LIST_SIZE; i ++) {
+        // i < 1024
         list_init(hash_list + i);
     }
 
     if ((idleproc = alloc_proc()) == NULL) {
+        //为0号进程分配进程控制块PCB
         panic("cannot alloc idleproc.\n");
     }
 
-    idleproc->pid = 0;
-    idleproc->state = PROC_RUNNABLE;
-    idleproc->kstack = (uintptr_t)bootstack;
-    idleproc->need_resched = 1;
+    idleproc->pid = 0;  //0号进程
+    idleproc->state = PROC_RUNNABLE;  //可运行态
+    idleproc->kstack = (uintptr_t)bootstack;  //线程的堆栈是独立的
+    idleproc->need_resched = 1;  //需要被调度
     set_proc_name(idleproc, "idle");
-    nr_process ++;
+    nr_process ++; //系统所维护的进程的总数量
 
-    current = idleproc;
+    current = idleproc;  //current指向的是当前线程
 
+    // 0号进程利用init_main创建1号线程
     int pid = kernel_thread(init_main, "Hello world!!", 0);
     if (pid <= 0) {
         panic("create init_main failed.\n");

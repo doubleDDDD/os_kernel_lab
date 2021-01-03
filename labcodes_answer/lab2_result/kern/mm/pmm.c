@@ -28,6 +28,7 @@
  * contains the new ESP value for CPL = 0. When an interrupt happens in protected
  * mode, the x86 CPU will look in the TSS for SS0 and ESP0 and load their value
  * into SS and ESP respectively.
+ * 这个是TSS任务状态段
  * */
 static struct taskstate ts = {0};
 
@@ -42,7 +43,7 @@ pde_t *boot_pgdir = &__boot_pgdir;
 // physical address of boot-time page directory
 uintptr_t boot_cr3;
 
-// physical memory management
+// physical memory management，这其实是一个对象的实例
 const struct pmm_manager *pmm_manager;
 
 /* *
@@ -58,8 +59,16 @@ const struct pmm_manager *pmm_manager;
  * always available at virtual address PGADDR(PDX(VPT), PDX(VPT), 0), to which
  * vpd is set bellow.
  * */
-pte_t * const vpt = (pte_t *)VPT;
+pte_t * const vpt = (pte_t *)VPT;  //0xFAC00000
+//0xfafeb000 这个实际上就是页目录表的虚拟地址，高10位与中间的10位是一样的，都是1003
+//
 pde_t * const vpd = (pde_t *)PGADDR(PDX(VPT), PDX(VPT), 0);
+
+// #define VPT                 0xFAC00000 virtual page table
+// page directory index
+// #define PDX(la) ((((uintptr_t)(la)) >> PDXSHIFT) & 0x3FF)  //右移22位，就是page directory的index
+// construct linear address from indexes and offset
+// #define PGADDR(d, t, o) ((uintptr_t)((d) << PDXSHIFT | (t) << PTXSHIFT | (o)))
 
 /* *
  * Global Descriptor Table:
@@ -137,7 +146,7 @@ gdt_init(void) {
 //init_pmm_manager - initialize a pmm_manager instance
 static void
 init_pmm_manager(void) {
-    pmm_manager = &default_pmm_manager;
+    pmm_manager = &default_pmm_manager;  //pmm_manager本身是一个全局变量的
     cprintf("memory management: %s\n", pmm_manager->name);
     pmm_manager->init();
 }
@@ -145,6 +154,7 @@ init_pmm_manager(void) {
 //init_memmap - call pmm->init_memmap to build Page struct for free memory  
 static void
 init_memmap(struct Page *base, size_t n) {
+    //对于一个空闲的物理内存区域，base是他的元数据的起始地址，n是大小
     pmm_manager->init_memmap(base, n);
 }
 
@@ -189,12 +199,15 @@ nr_free_pages(void) {
 /* pmm_init - initialize the physical memory management */
 static void
 page_init(void) {
+    // 这个时候0-4M的页机制的映射已经建立好了
+    /* e820会被映射到物理地址0x8000上，实地址模式的时候被映射过去的,实际上是保存了一个物理内存的布局 */
     struct e820map *memmap = (struct e820map *)(0x8000 + KERNBASE);
     uint64_t maxpa = 0;
 
     cprintf("e820map:\n");
     int i;
     for (i = 0; i < memmap->nr_map; i ++) {
+        //遍历内存段
         uint64_t begin = memmap->map[i].addr, end = begin + memmap->map[i].size;
         cprintf("  memory: %08llx, [%08llx, %08llx], type = %d.\n",
                 memmap->map[i].size, begin, end - 1, memmap->map[i].type);
@@ -211,12 +224,17 @@ page_init(void) {
     extern char end[];
 
     npage = maxpa / PGSIZE;
-    pages = (struct Page *)ROUNDUP((void *)end, PGSIZE);
 
+    //由于bootloader加载ucore的结束地址（用全局指针变量end记录）以上的空间没有被使用
+    //所以我们可以把end按页大小为边界取整后，作为管理页级物理内存空间所需的Page结构的内存空间
+    pages = (struct Page *)ROUNDUP((void *)end, PGSIZE);  //数组的每一项代表一个物理页框，记录所有的物理页
+
+    // 遍历物理页, 将存放物理页框信息的内存设置为不可分配的模式
     for (i = 0; i < npage; i ++) {
         SetPageReserved(pages + i);
     }
 
+    //将一个kernel中的虚拟地址转为对应的物理地址，这样就得到了目前可用的物理地址空间的起始位置，是起始的物理地址
     uintptr_t freemem = PADDR((uintptr_t)pages + sizeof(struct Page) * npage);
 
     for (i = 0; i < memmap->nr_map; i ++) {
@@ -232,7 +250,11 @@ page_init(void) {
                 begin = ROUNDUP(begin, PGSIZE);
                 end = ROUNDDOWN(end, PGSIZE);
                 if (begin < end) {
-                    init_memmap(pa2page(begin), (end - begin) / PGSIZE);
+                    //获得空闲空间的起始地址begin和结束地址end
+                    //而init_memmap函数则是把空闲物理页对应的Page结构中的flags和引用计数ref清零
+                    //并加到free_area.free_list指向的双向列表中，为将来的空闲页管理做好初始化准备工作
+                    //pa2page得到的是 begin所在page元数据的地址，这个就是虚拟地址了
+                    init_memmap(pa2page(begin), (end - begin) / PGSIZE);  //这里显示的都是物理内存地址
                 }
             }
         }
@@ -245,13 +267,16 @@ page_init(void) {
 //  size: memory size
 //  pa:   physical address of this memory
 //  perm: permission of this memory  
+// boot_map_segment(boot_pgdir, KERNBASE, KMEMSIZE, 0, PTE_W);  //KMEMSIZE 0x38000000 KERNBASE 0xc0000000
+// 这里是为了把0-0x38000000的物理内存映射到虚拟地址空间0xc0000000-0xc0000000+0x38000000中
 static void
 boot_map_segment(pde_t *pgdir, uintptr_t la, size_t size, uintptr_t pa, uint32_t perm) {
-    assert(PGOFF(la) == PGOFF(pa));
-    size_t n = ROUNDUP(size + PGOFF(la), PGSIZE) / PGSIZE;
-    la = ROUNDDOWN(la, PGSIZE);
+    assert(PGOFF(la) == PGOFF(pa));  //PGOFF是取低12位
+    size_t n = ROUNDUP(size + PGOFF(la), PGSIZE) / PGSIZE;  //物理页框的总数量
+    la = ROUNDDOWN(la, PGSIZE);  //向下取整到距离4K倍数最近的地方
     pa = ROUNDDOWN(pa, PGSIZE);
     for (; n > 0; n --, la += PGSIZE, pa += PGSIZE) {
+        //物理页框的总数
         pte_t *ptep = get_pte(pgdir, la, 1);
         assert(ptep != NULL);
         *ptep = pa | PTE_P | perm;
@@ -272,10 +297,13 @@ boot_alloc_page(void) {
 
 //pmm_init - setup a pmm to manage physical memory, build PDT&PT to setup paging mechanism 
 //         - check the correctness of pmm & paging mechanism, print PDT&PT
+// PDT page directory table
+// PT page table
 void
 pmm_init(void) {
     // We've already enabled paging
-    boot_cr3 = PADDR(boot_pgdir);
+    // 已经使能了分页
+    boot_cr3 = PADDR(boot_pgdir);  //虚拟地址转物理地址'0x118000'
 
     //We need to alloc/free the physical memory (granularity is 4KB or other size). 
     //So a framework of physical memory manager (struct pmm_manager)is defined in pmm.h
@@ -297,11 +325,14 @@ pmm_init(void) {
 
     // recursively insert boot_pgdir in itself
     // to form a virtual page table at virtual address VPT
+    // VPT = 0xFAC00000
+    // PDX 是右移22位
+    // 实际上是为页目录中的一项来赋值 boot_pgdir[1003] = 0x118000
     boot_pgdir[PDX(VPT)] = PADDR(boot_pgdir) | PTE_P | PTE_W;
 
     // map all physical memory to linear memory with base linear addr KERNBASE
     // linear_addr KERNBASE ~ KERNBASE + KMEMSIZE = phy_addr 0 ~ KMEMSIZE
-    boot_map_segment(boot_pgdir, KERNBASE, KMEMSIZE, 0, PTE_W);
+    boot_map_segment(boot_pgdir, KERNBASE, KMEMSIZE, 0, PTE_W);  //KMEMSIZE 0x38000000
 
     // Since we are using bootloader's GDT,
     // we should reload gdt (second time, the last time) to get user segments and the TSS
@@ -359,18 +390,21 @@ get_pte(pde_t *pgdir, uintptr_t la, bool create) {
     }
     return NULL;          // (8) return page table entry
 #endif
-    pde_t *pdep = &pgdir[PDX(la)];
-    if (!(*pdep & PTE_P)) {
-        struct Page *page;
+    pde_t *pdep = &pgdir[PDX(la)];  //还是directory目录表中的项， PDX取逻辑地址的高10位
+    if (!(*pdep & PTE_P)) {  //没有页目录项这里，是全部都是0的这里
+        //不是1的话就需要创建一个二级页表
+        struct Page *page;  //建立一个指向page的指针，是栈上的，用的是虚拟地址
         if (!create || (page = alloc_page()) == NULL) {
+            //分配一个页作为2级页表
             return NULL;
         }
-        set_page_ref(page, 1);
-        uintptr_t pa = page2pa(page);
-        memset(KADDR(pa), 0, PGSIZE);
-        *pdep = pa | PTE_U | PTE_W | PTE_P;
+        //这个page是一个虚拟地址
+        set_page_ref(page, 1);  //表明这个页有一个引用
+        uintptr_t pa = page2pa(page);  //得到page的物理地址
+        memset(KADDR(pa), 0, PGSIZE);  //初始化这新分配的这个page
+        *pdep = pa | PTE_U | PTE_W | PTE_P; //填充页目录项,指向新分配的page
     }
-    return &((pte_t *)KADDR(PDE_ADDR(*pdep)))[PTX(la)];
+    return &((pte_t *)KADDR(PDE_ADDR(*pdep)))[PTX(la)];  //返回内核的虚地址
 }
 
 //get_page - get related Page struct for linear address la using PDT pgdir

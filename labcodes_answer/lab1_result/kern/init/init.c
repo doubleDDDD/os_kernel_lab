@@ -9,13 +9,13 @@
 #include <intr.h>
 #include <pmm.h>
 #include <kmonitor.h>
-void kern_init(void) __attribute__((noreturn));
-void grade_backtrace(void);
+void kern_init(void) __attribute__((noreturn));  //kernel_init是没有返回值的函数
+void grade_backtrace(void);  //均为函数声明
 static void lab1_switch_test(void);
 
 void
 kern_init(void){
-    extern char edata[], end[];
+    extern char edata[], end[];  //引用外部定义的变量
     memset(edata, 0, end - edata);
 
     cons_init();                // init the console
@@ -25,7 +25,7 @@ kern_init(void){
 
     print_kerninfo();
 
-    grade_backtrace();
+    grade_backtrace();  //打印当前的调用栈
 
     pmm_init();                 // init physical memory management
 

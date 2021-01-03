@@ -35,10 +35,10 @@ kern_init(void) {
     pic_init();                 // init interrupt controller
     idt_init();                 // init interrupt descriptor table
 
-    vmm_init();                 // init virtual memory management
+    vmm_init();                 // init virtual memory management，实现虚拟内存的管理
 
-    ide_init();                 // init ide devices
-    swap_init();                // init swap
+    ide_init();                 // init ide devices  //初始化ide设备
+    swap_init();                // init swap  // 交换分区的初始化
 
     clock_init();               // init clock interrupt
     intr_enable();              // enable irq interrupt

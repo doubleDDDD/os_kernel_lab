@@ -25,6 +25,7 @@ static void print_ticks() {
  * Must be built at run time because shifted function addresses can't
  * be represented in relocation records.
  * */
+//中断描述符表
 static struct gatedesc idt[256] = {{0}};
 
 static struct pseudodesc idt_pd = {
@@ -32,6 +33,8 @@ static struct pseudodesc idt_pd = {
 };
 
 /* idt_init - initialize IDT to each of the entry points in kern/trap/vectors.S */
+//中断号与中断服务例程相对应
+//IDTR描述了IDT表的起始地址，不是进程的现场
 void
 idt_init(void) {
      /* LAB1 YOUR CODE : STEP 2 */
@@ -49,12 +52,13 @@ idt_init(void) {
     extern uintptr_t __vectors[];
     int i;
     for (i = 0; i < sizeof(idt) / sizeof(struct gatedesc); i ++) {
-        SETGATE(idt[i], 0, GD_KTEXT, __vectors[i], DPL_KERNEL);
+        SETGATE(idt[i], 0, GD_KTEXT, __vectors[i], DPL_KERNEL);  //初始化IDT表格中的每一项
     }
 	// set for switch from user to kernel
+    //允许用户态的代码到内核态
     SETGATE(idt[T_SWITCH_TOK], 0, GD_KTEXT, __vectors[T_SWITCH_TOK], DPL_USER);
 	// load the IDT
-    lidt(&idt_pd);
+    lidt(&idt_pd);  //告诉CPU IDT表在哪里，把地址给到寄存器IDTR中
 }
 
 static const char *
@@ -147,12 +151,14 @@ print_regs(struct pushregs *regs) {
 struct trapframe switchk2u, *switchu2k;
 
 /* trap_dispatch - dispatch based on what type of trap occurred */
+//完成对具体中断的处理
 static void
 trap_dispatch(struct trapframe *tf) {
     char c;
 
+    //中断号
     switch (tf->tf_trapno) {
-    case IRQ_OFFSET + IRQ_TIMER:
+    case IRQ_OFFSET + IRQ_TIMER:  //时钟中断
         /* LAB1 YOUR CODE : STEP 3 */
         /* handle the timer interrupt */
         /* (1) After a timer interrupt, you should record this event using a global variable (increase it), such as ticks in kern/driver/clock.c
@@ -173,23 +179,24 @@ trap_dispatch(struct trapframe *tf) {
         cprintf("kbd [%03d] %c\n", c, c);
         break;
     //LAB1 CHALLENGE 1 : YOUR CODE you should modify below codes.
+    //通过软中断到用户态 to user
     case T_SWITCH_TOU:
         if (tf->tf_cs != USER_CS) {
             switchk2u = *tf;
             switchk2u.tf_cs = USER_CS;
             switchk2u.tf_ds = switchk2u.tf_es = switchk2u.tf_ss = USER_DS;
-            switchk2u.tf_esp = (uint32_t)tf + sizeof(struct trapframe) - 8;
+            switchk2u.tf_esp = (uint32_t)tf + sizeof(struct trapframe) - 8;  //建立好中断帧
 		
             // set eflags, make sure ucore can use io under user mode.
             // if CPL > IOPL, then cpu will generate a general protection.
-            switchk2u.tf_eflags |= FL_IOPL_MASK;
+            switchk2u.tf_eflags |= FL_IOPL_MASK;  //用户态可以执行I/O操作
 		
             // set temporary stack
             // then iret will jump to the right stack
-            *((uint32_t *)tf - 1) = (uint32_t)&switchk2u;
+            *((uint32_t *)tf - 1) = (uint32_t)&switchk2u;  //设置一个临时的栈
         }
         break;
-    case T_SWITCH_TOK:
+    case T_SWITCH_TOK:  //用户态到内核态
         if (tf->tf_cs != KERNEL_CS) {
             tf->tf_cs = KERNEL_CS;
             tf->tf_ds = tf->tf_es = KERNEL_DS;
@@ -217,6 +224,7 @@ trap_dispatch(struct trapframe *tf) {
  * the code in kern/trap/trapentry.S restores the old CPU state saved in the
  * trapframe and then uses the iret instruction to return from the exception.
  * */
+//中断服务例程在这里
 void
 trap(struct trapframe *tf) {
     // dispatch based on what type of trap occurred

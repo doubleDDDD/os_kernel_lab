@@ -106,16 +106,18 @@ default_init(void) {
 
 static void
 default_init_memmap(struct Page *base, size_t n) {
+    //实际上是在初始化描述物理页框的元数据
     assert(n > 0);
     struct Page *p = base;
     for (; p != base + n; p ++) {
-        assert(PageReserved(p));
+        //初始化一段连续的物理空闲页中的描述符
+        assert(PageReserved(p));  //确保这些数据不是被保留的
         p->flags = p->property = 0;
         set_page_ref(p, 0);
     }
-    base->property = n;
+    base->property = n;  // head page
     SetPageProperty(base);
-    nr_free += n;
+    nr_free += n;  //这个是总的空闲块的数量
     list_add(&free_list, &(base->page_link));
 }
 
@@ -128,9 +130,10 @@ default_alloc_pages(size_t n) {
     struct Page *page = NULL;
     list_entry_t *le = &free_list;
     while ((le = list_next(le)) != &free_list) {
-        struct Page *p = le2page(le, page_link);
+        //沿着这个list去搜索, 没有转回来且
+        struct Page *p = le2page(le, page_link);  //convert list entry to page，一段空闲空间的第一个page
         if (p->property >= n) {
-            page = p;
+            page = p;  //能够满足分配需求
             break;
         }
     }
@@ -300,6 +303,7 @@ default_check(void) {
     assert(total == 0);
 }
 
+//c中面向对象的编程方法，这个本身它已经是一个对象了
 const struct pmm_manager default_pmm_manager = {
     .name = "default_pmm_manager",
     .init = default_init,

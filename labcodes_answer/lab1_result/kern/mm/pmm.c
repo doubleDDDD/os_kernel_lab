@@ -29,6 +29,7 @@ static struct taskstate ts = {0};
 /* *
  * Global Descriptor Table:
  *
+ * 用户的段与kernel的段是不一样的
  * The kernel and user segments are identical (except for the DPL). To load
  * the %ss register, the CPL must equal the DPL. Thus, we must duplicate the
  * segments for the user and the kernel. Defined as follows:

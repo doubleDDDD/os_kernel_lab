@@ -1,5 +1,6 @@
 #include <stdio.h>
 
+// 这个是用来生成vectors.S的汇编代码的
 int
 main(void) {
     printf(".text\n");

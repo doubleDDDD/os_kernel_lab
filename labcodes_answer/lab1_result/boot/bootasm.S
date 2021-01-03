@@ -46,19 +46,19 @@ seta20.2:
     # and segment translation that makes virtual addresses
     # identical to physical addresses, so that the
     # effective memory map does not change during the switch.
-    lgdt gdtdesc
+    lgdt gdtdesc  # 加载全局描述符表，就是把内存地址给到GDTR寄存器中
     movl %cr0, %eax
-    orl $CR0_PE_ON, %eax
+    orl $CR0_PE_ON, %eax  # CRO寄存器的PE位置1
     movl %eax, %cr0
 
     # Jump to next instruction, but in 32-bit code segment.
     # Switches processor into 32-bit mode.
-    ljmp $PROT_MODE_CSEG, $protcseg
+    ljmp $PROT_MODE_CSEG, $protcseg  # 8，指向段表的段描述符
 
 .code32                                             # Assemble for 32-bit mode
 protcseg:
     # Set up the protected-mode data segment registers
-    movw $PROT_MODE_DSEG, %ax                       # Our data segment selector
+    movw $PROT_MODE_DSEG, %ax                       # Our data segment selector  # 数据段的段选择子是16，就是为寄存器复制
     movw %ax, %ds                                   # -> DS: Data Segment
     movw %ax, %es                                   # -> ES: Extra Segment
     movw %ax, %fs                                   # -> FS
@@ -66,19 +66,23 @@ protcseg:
     movw %ax, %ss                                   # -> SS: Stack Segment
 
     # Set up the stack pointer and call into C. The stack region is from 0--start(0x7c00)
+    # 建立堆栈
     movl $0x0, %ebp
-    movl $start, %esp
+    movl $start, %esp  # 栈顶的地址设为0x7c00,由高到低走
     call bootmain
 
     # If bootmain returns (it shouldn't), loop.
 spin:
     jmp spin
 
+# 最开始的这个GDT表就是这个
 # Bootstrap GDT
 .p2align 2                                          # force 4 byte alignment
 gdt:
-    SEG_NULLASM                                     # null seg
+    SEG_NULLASM                                     # null seg，第一个是空的
+    # 代码段，可以读可以执行，段的基址0，limit很大是4G
     SEG_ASM(STA_X|STA_R, 0x0, 0xffffffff)           # code seg for bootloader and kernel
+    # 数据段，有写权限
     SEG_ASM(STA_W, 0x0, 0xffffffff)                 # data seg for bootloader and kernel
 
 gdtdesc:

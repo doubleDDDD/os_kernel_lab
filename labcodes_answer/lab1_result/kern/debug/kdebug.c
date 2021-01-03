@@ -116,7 +116,7 @@ stab_binsearch(const struct stab *stabs, int *region_left, int *region_right,
  * has stored some information into '*info'.
  * */
 int
-debuginfo_eip(uintptr_t addr, struct eipdebuginfo *info) {
+debuginfo_eip(uintptr_t addr, struct eipdebuginfo* info) {
     const struct stab *stabs, *stab_end;
     const char *stabstr, *stabstr_end;
 

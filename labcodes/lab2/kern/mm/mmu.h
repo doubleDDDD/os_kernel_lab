@@ -201,16 +201,16 @@ struct taskstate {
 // use PGADDR(PDX(la), PTX(la), PGOFF(la)).
 
 // page directory index
-#define PDX(la) ((((uintptr_t)(la)) >> PDXSHIFT) & 0x3FF)
+#define PDX(la) ((((uintptr_t)(la)) >> PDXSHIFT) & 0x3FF)  //右移22位，就是page directory的index
 
 // page table index
-#define PTX(la) ((((uintptr_t)(la)) >> PTXSHIFT) & 0x3FF)
+#define PTX(la) ((((uintptr_t)(la)) >> PTXSHIFT) & 0x3FF)  //右移动12位，是page table的index
 
 // page number field of address
-#define PPN(la) (((uintptr_t)(la)) >> PTXSHIFT)
+#define PPN(la) (((uintptr_t)(la)) >> PTXSHIFT)  //一个物理地址属于哪个frame
 
 // offset in page
-#define PGOFF(la) (((uintptr_t)(la)) & 0xFFF)
+#define PGOFF(la) (((uintptr_t)(la)) & 0xFFF)  //一个地址在页中的偏移
 
 // construct linear address from indexes and offset
 #define PGADDR(d, t, o) ((uintptr_t)((d) << PDXSHIFT | (t) << PTXSHIFT | (o)))

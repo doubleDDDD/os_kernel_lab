@@ -60,6 +60,7 @@ struct pushregs {
 };
 
 struct trapframe {
+    /* 产生一个中断之后，软件与硬件要保存那些信息 一堆寄存器*/
     struct pushregs tf_regs;
     uint16_t tf_gs;
     uint16_t tf_padding0;
@@ -70,6 +71,7 @@ struct trapframe {
     uint16_t tf_ds;
     uint16_t tf_padding3;
     uint32_t tf_trapno;
+    //上面是软件保存的，下面是软件保存的
     /* below here defined by x86 hardware */
     uint32_t tf_err;
     uintptr_t tf_eip;
@@ -77,6 +79,7 @@ struct trapframe {
     uint16_t tf_padding4;
     uint32_t tf_eflags;
     /* below here only when crossing rings, such as from user to kernel */
+    //特殊的，用户态到内核态，硬件会多保存的内容
     uintptr_t tf_esp;
     uint16_t tf_ss;
     uint16_t tf_padding5;

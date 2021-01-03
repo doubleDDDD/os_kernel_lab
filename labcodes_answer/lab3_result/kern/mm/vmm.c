@@ -173,31 +173,35 @@ check_vmm(void) {
 
 static void
 check_vma_struct(void) {
+    //这个函数主要是检查vmm，即虚拟内存的分配是否是ok的
     size_t nr_free_pages_store = nr_free_pages();
 
-    struct mm_struct *mm = mm_create();
+    struct mm_struct *mm = mm_create();  //建立一个mm struct
     assert(mm != NULL);
 
-    int step1 = 10, step2 = step1 * 10;
+    int step1 = 10, step2 = step1 * 10; //step1=10,step2=20
 
     int i;
     for (i = step1; i >= 1; i --) {
-        struct vma_struct *vma = vma_create(i * 5, i * 5 + 2, 0);
+        struct vma_struct *vma = vma_create(i * 5, i * 5 + 2, 0); //50 52 45 47 ... 一系列的虚拟地址
         assert(vma != NULL);
-        insert_vma_struct(mm, vma);
+        insert_vma_struct(mm, vma);  //插入到list的管理中
     }
 
     for (i = step1 + 1; i <= step2; i ++) {
-        struct vma_struct *vma = vma_create(i * 5, i * 5 + 2, 0);
+        struct vma_struct *vma = vma_create(i * 5, i * 5 + 2, 0);  //生成一系列的虚拟地址 55 57 ...
         assert(vma != NULL);
         insert_vma_struct(mm, vma);
     }
 
-    list_entry_t *le = list_next(&(mm->mmap_list));
+    // 总之上面的代码为当前的程序创建了一系列的虚拟地址空间
 
+    list_entry_t *le = list_next(&(mm->mmap_list)); //准备指向第一个vm结构体的描述符
+    
+    //这个for循环都是在断言的检查
     for (i = 1; i <= step2; i ++) {
         assert(le != &(mm->mmap_list));
-        struct vma_struct *mmap = le2vma(le, list_link);
+        struct vma_struct *mmap = le2vma(le, list_link);  //通过一个指向结构体成员的指针找到指向结构体的指针
         assert(mmap->vm_start == i * 5 && mmap->vm_end == i * 5 + 2);
         le = list_next(le);
     }
@@ -247,14 +251,15 @@ check_pgfault(void) {
     pde_t *pgdir = mm->pgdir = boot_pgdir;
     assert(pgdir[0] == 0);
 
-    struct vma_struct *vma = vma_create(0, PTSIZE, VM_WRITE);
+    struct vma_struct *vma = vma_create(0, PTSIZE, VM_WRITE);  //创建一个4M的虚拟地址空间
     assert(vma != NULL);
 
     insert_vma_struct(mm, vma);
 
     uintptr_t addr = 0x100;
     assert(find_vma(mm, addr) == vma);
-
+ 
+    // 这里已经在向不存在的物理地址空间中去写数据了，是会触发缺页中断的
     int i, sum = 0;
     for (i = 0; i < 100; i ++) {
         *(char *)(addr + i) = i;
@@ -264,7 +269,9 @@ check_pgfault(void) {
         sum -= *(char *)(addr + i);
     }
     assert(sum == 0);
+    //上述数据在缺页中断的处理下，能够分配对应的页并且继续执行
 
+    // 释放对应的页表项以及对应的page
     page_remove(pgdir, ROUNDDOWN(addr, PGSIZE));
     free_page(pde2page(pgdir[0]));
     pgdir[0] = 0;

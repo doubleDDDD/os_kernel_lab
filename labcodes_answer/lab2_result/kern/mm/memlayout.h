@@ -4,6 +4,7 @@
 /* This file contains the definitions for memory management in our OS. */
 
 /* global segment number */
+//全局的段号，即GDT表中的下标记
 #define SEG_KTEXT   1
 #define SEG_KDATA   2
 #define SEG_UTEXT   3
@@ -11,14 +12,14 @@
 #define SEG_TSS     5
 
 /* global descrptor numbers */
-#define GD_KTEXT    ((SEG_KTEXT) << 3)      // kernel text
-#define GD_KDATA    ((SEG_KDATA) << 3)      // kernel data
-#define GD_UTEXT    ((SEG_UTEXT) << 3)      // user text
-#define GD_UDATA    ((SEG_UDATA) << 3)      // user data
-#define GD_TSS      ((SEG_TSS) << 3)        // task segment selector
+#define GD_KTEXT    ((SEG_KTEXT) << 3)      // kernel text 8
+#define GD_KDATA    ((SEG_KDATA) << 3)      // kernel data 16
+#define GD_UTEXT    ((SEG_UTEXT) << 3)      // user text 24
+#define GD_UDATA    ((SEG_UDATA) << 3)      // user data 32
+#define GD_TSS      ((SEG_TSS) << 3)        // task segment selector 40
 
-#define DPL_KERNEL  (0)
-#define DPL_USER    (3)
+#define DPL_KERNEL  (0)  //段描述符的特权级，该描述符所对应的段的描述符特权级
+#define DPL_USER    (3)  //
 
 #define KERNEL_CS   ((GD_KTEXT) | DPL_KERNEL)
 #define KERNEL_DS   ((GD_KDATA) | DPL_KERNEL)
@@ -82,6 +83,7 @@ typedef uintptr_t pde_t;
 #define E820_ARM            1       // address range memory
 #define E820_ARR            2       // address range reserved
 
+//其实说明的就是物理内存被分成了多少段
 struct e820map {
     int nr_map;
     struct {
@@ -95,12 +97,13 @@ struct e820map {
  * struct Page - Page descriptor structures. Each Page describes one
  * physical page. In kern/mm/pmm.h, you can find lots of useful functions
  * that convert Page to other data types, such as phyical address.
+ * 每一个这样的page代表一个物理页框
  * */
 struct Page {
-    int ref;                        // page frame's reference counter
+    int ref;                        // page frame's reference counter，物理页框被引用的次数
     uint32_t flags;                 // array of flags that describe the status of the page frame
     unsigned int property;          // the num of free block, used in first fit pm manager
-    list_entry_t page_link;         // free list link
+    list_entry_t page_link;         // free list link，有一个前向的指针和一个后向的指针
 };
 
 /* Flags describing the status of a page frame */

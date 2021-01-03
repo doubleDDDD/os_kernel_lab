@@ -30,7 +30,7 @@ static void check_swap(void);
 int
 swap_init(void)
 {
-     swapfs_init();
+     swapfs_init();  //实现对于swap分区的读与写操作
 
      if (!(1024 <= max_swap_offset && max_swap_offset < MAX_SWAP_OFFSET_LIMIT))
      {
@@ -38,14 +38,14 @@ swap_init(void)
      }
      
 
-     sm = &swap_manager_fifo;
+     sm = &swap_manager_fifo;  //页替换算法
      int r = sm->init();
      
      if (r == 0)
      {
-          swap_init_ok = 1;
+          swap_init_ok = 1;  //可以操作了
           cprintf("SWAP: manager = %s\n", sm->name);
-          check_swap();
+          check_swap();  //这里是实验的过程
      }
 
      return r;

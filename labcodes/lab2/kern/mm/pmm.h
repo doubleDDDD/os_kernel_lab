@@ -86,7 +86,7 @@ page2pa(struct Page *page) {
 
 static inline struct Page *
 pa2page(uintptr_t pa) {
-    if (PPN(pa) >= npage) {
+    if (PPN(pa) >= npage) {  //将一个物理地址右移12位，以获得其frame编号
         panic("pa2page called with invalid pa");
     }
     return &pages[PPN(pa)];

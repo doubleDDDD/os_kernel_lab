@@ -35,8 +35,33 @@ static inline void sti(void) __attribute__((always_inline));
 static inline void cli(void) __attribute__((always_inline));
 static inline void ltr(uint16_t sel) __attribute__((always_inline));
 
+/*
+assembly(*.S)
+movl $0xffff, %eax
+inline assembly(*.c)
+asm("movl $0xffff, %%eax") 两个%是为了区别%0与%1
+
+asm(assembler template : output operands : input operands)
+指令模板后面用小括号括起来的是C语言表达式
+他们按照出现的顺序分别与指令操作数 %0 %1 对应
+
+根据模板与约束生成一个汇编语句模板
+()前面的冒号中的内容是一个约束条件
+
+inline assembly(*.c)
+    uint32_t cr0;
+    asm volatile("movl %%cr0, %0\n":"=r"(cr0));  
+    //%0是与括号中的cr0变量对应的，表示将寄存器中的值写到%0中
+    //约束是r，编译器会自己去找合适的寄存器将cr0寄存器中的值写入
+    //同时这个值也会输出到变量cr0中
+    cr0 |= 0x8000000;
+    asm volatile("movl %0, %%cr0\n"::"r"(cr0));
+    //cr0变量的值已经改变了，需要重新赋值给cr0寄存器，这里通过一个寄存器来转一下
+*/
+
 static inline uint8_t
 inb(uint16_t port) {
+    /* 由I/O端口读一个字节到data */
     uint8_t data;
     asm volatile ("inb %1, %0" : "=a" (data) : "d" (port));
     return data;
@@ -54,6 +79,7 @@ insl(uint32_t port, void *addr, int cnt) {
 
 static inline void
 outb(uint16_t port, uint8_t data) {
+    /* 向I/O端口写一个字节 */
     asm volatile ("outb %0, %1" :: "a" (data), "d" (port));
 }
 
@@ -64,8 +90,9 @@ outw(uint16_t port, uint16_t data) {
 
 static inline uint32_t
 read_ebp(void) {
+    /* 就是将rbp寄存器中的值给到rbp变量中 */
     uint32_t ebp;
-    asm volatile ("movl %%ebp, %0" : "=r" (ebp));
+    asm volatile ("movl %%ebp, %0" : "=r" (ebp));  //volatile这个防止优化的
     return ebp;
 }
 

@@ -39,6 +39,7 @@ static struct taskstate ts = {0};
  *   - 0x20:  user data segment
  *   - 0x28:  defined for tss, initialized in gdt_init
  * */
+//重新定义了GDT描述符表，新增了3个segment以及一个TSS段s
 static struct segdesc gdt[] = {
     SEG_NULL,
     [SEG_KTEXT] = SEG(STA_X | STA_R, 0x0, 0xFFFFFFFF, DPL_KERNEL),
@@ -78,7 +79,7 @@ gdt_init(void) {
     // user to the kernel. But not safe here, it's only a temporary value,
     // it will be set to KSTACKTOP in lab2.
     ts.ts_esp0 = (uint32_t)&stack0 + sizeof(stack0);
-    ts.ts_ss0 = KERNEL_DS;
+    ts.ts_ss0 = KERNEL_DS;  //为了用户态进入到内核态的时候能够找到对应的内核栈，反之也成立
 
     // initialize the TSS filed of the gdt
     gdt[SEG_TSS] = SEG16(STS_T32A, (uint32_t)&ts, sizeof(ts), DPL_KERNEL);

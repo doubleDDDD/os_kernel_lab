@@ -320,8 +320,8 @@ pmm_init(void) {
 //get_pte - get pte and return the kernel virtual address of this pte for la
 //        - if the PT contians this pte didn't exist, alloc a page for PT
 // parameter:
-//  pgdir:  the kernel virtual base address of PDT
-//  la:     the linear address need to map
+//  pgdir:  the kernel virtual base address of PDT 页目录表的地址
+//  la:     the linear address need to map 逻辑地址
 //  create: a logical value to decide if alloc a page for PT
 // return vaule: the kernel virtual address of this pte
 pte_t *

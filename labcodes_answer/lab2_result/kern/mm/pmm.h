@@ -86,6 +86,7 @@ page2pa(struct Page *page) {
 
 static inline struct Page *
 pa2page(uintptr_t pa) {
+    /* 一个物理地址所对应的页对象 */
     if (PPN(pa) >= npage) {
         panic("pa2page called with invalid pa");
     }

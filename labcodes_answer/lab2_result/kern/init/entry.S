@@ -5,16 +5,18 @@
 
 .text
 .globl kern_entry
-kern_entry:
+kern_entry:  # 这里的映射机制依然是在0x10000的位置
     # load pa of boot pgdir
-    movl $REALLOC(__boot_pgdir), %eax
-    movl %eax, %cr3
+    movl $REALLOC(__boot_pgdir), %eax  # 加载一个页表
+    movl %eax, %cr3  //将页目录表的起始地址写入cr3中
 
     # enable paging
     movl %cr0, %eax
     orl $(CR0_PE | CR0_PG | CR0_AM | CR0_WP | CR0_NE | CR0_TS | CR0_EM | CR0_MP), %eax
     andl $~(CR0_TS | CR0_EM), %eax
     movl %eax, %cr0
+
+    # CPU进入了分页模式
 
     # update eip
     # now, eip = 0x1.....
@@ -63,6 +65,7 @@ __boot_pgdir:
 
 .set i, 0
 __boot_pt1:
+.globl __boot_pt1
 .rept 1024
     .long i * PGSIZE + (PTE_P | PTE_W)
     .set i, i + 1

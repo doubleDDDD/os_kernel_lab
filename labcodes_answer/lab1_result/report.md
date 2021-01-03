@@ -154,18 +154,29 @@ bin/ucore.img
 [练习2.1] 从 CPU 加电后执行的第一条指令开始,单步跟踪 BIOS 的执行。
 
 练习2可以单步跟踪，方法如下：
- 
+
 1 修改 lab1/tools/gdbinit,内容为:
 ```
-set architecture i8086
+set architecture i8086  //设置CPU模式
+target remote :1234  //指定调试端口号
+file ./bin/kernel  //指定调试elf文件，主要是符号
+break kern_init  //指定断点位置
+c  //使其跑起来，否则开始一定是卡着的
+```
+缺省的内容是这样的
+```
+file obj/bootblock.o
 target remote :1234
+break bootmain
+continue
 ```
 
 2 在 lab1目录下，执行
 ```
 make debug 
 ```
-该命令会根据gdbinit，在gdb起来的时候就去执行gdbinit中的语句
+该命令会根据gdbinit，在gdb起来的时候就去执行gdbinit中的语句。这种情况下gdb链上去的时候qemu是被卡住的
+会根据指令前进
 
 3 在看到gdb的调试界面(gdb)后，在gdb调试界面下执行如下命令
 ```
@@ -175,7 +186,8 @@ si
 
 4 在gdb界面下，可通过如下命令来看BIOS的代码
 ```
- x /2i $pc  //显示当前eip处的汇编指令
+ x /2i $pc  //显示当前eip处的汇编指令，显示2条
+ x /10i $pc  //显示10条
 ```
 
 > [进一步的补充]
@@ -196,13 +208,13 @@ si
 在tools/gdbinit结尾加上
 
 ```
-    set architecture i8086  //设置当前调试的CPU是8086
+    set architecture i8086  //设置当前调试的CPU是8086，16位的实模式CPU
 	b *0x7c00  //在0x7c00处设置断点。此地址是bootloader入口点地址，可看boot/bootasm.S的start地址处
 	c          //continue简称，表示继续执行
 	x /2i $pc  //显示当前eip处的汇编指令
-	set architecture i386  //设置当前调试的CPU是80386
+	set architecture i386  //设置当前调试的CPU是80386，32位的跨时代CPU
 ```
-	
+
 运行"make debug"便可得到
 
 ```
