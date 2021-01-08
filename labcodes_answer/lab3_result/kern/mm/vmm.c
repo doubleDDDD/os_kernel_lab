@@ -321,16 +321,18 @@ do_pgfault(struct mm_struct *mm, uint32_t error_code, uintptr_t addr) {
         goto failed;
     }
     //check the error_code
+    // 与 011 进行按位与
     switch (error_code & 3) {
     default:
-            /* error code flag : default is 3 ( W/R=1, P=1): write, present */
-    case 2: /* error code flag : (W/R=1, P=0): write, not present */
+            // 11
+            /* error code flag : default is 3 ( W/R=1, P=1): write, present*/
+    case 2: /* error code flag : (W/R=1, P=0): write, not present 10*/
         if (!(vma->vm_flags & VM_WRITE)) {
             cprintf("do_pgfault failed: error code flag = write AND not present, but the addr's vma cannot write\n");
             goto failed;
         }
         break;
-    case 1: /* error code flag : (W/R=0, P=1): read, present */
+    case 1: /* error code flag : (W/R=0, P=1): read, present 01*/
         cprintf("do_pgfault failed: error code flag = read AND present\n");
         goto failed;
     case 0: /* error code flag : (W/R=0, P=0): read, not present */

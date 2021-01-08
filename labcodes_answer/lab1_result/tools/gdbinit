@@ -1,5 +1,4 @@
-set architecture i8086
+file bin/kernel
 target remote :1234
-file ./bin/kernel
-break kern_init
+break lab1_switch_test
 c

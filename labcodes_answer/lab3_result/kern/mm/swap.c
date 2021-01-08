@@ -83,6 +83,7 @@ swap_out(struct mm_struct *mm, int n, int in_tick)
      int i;
      for (i = 0; i != n; ++ i)
      {
+          // 一个页一个页的去替换
           uintptr_t v;
           //struct Page **ptr_page=NULL;
           struct Page *page;
