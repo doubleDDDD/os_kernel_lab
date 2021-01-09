@@ -292,7 +292,7 @@ setup_pgdir(struct mm_struct *mm) {
         return -E_NO_MEM;
     }
     pde_t *pgdir = page2kva(page);
-    memcpy(pgdir, boot_pgdir, PGSIZE);
+    memcpy(pgdir, boot_pgdir, PGSIZE);  // 拷贝一下内核页表，使得用户态进程在内核态能够正确的映射
     pgdir[PDX(VPT)] = PADDR(pgdir) | PTE_P | PTE_W;
     mm->pgdir = pgdir;
     return 0;
@@ -456,26 +456,31 @@ do_exit(int error_code) {
     
     struct mm_struct *mm = current->mm;
     if (mm != NULL) {
-        lcr3(boot_cr3);
-        if (mm_count_dec(mm) == 0) {
+        // 表示要退出的是用户进程
+        lcr3(boot_cr3);  // 切换页表，保证不会再去用户态了，便于清理用户态的数据
+        if (mm_count_dec(mm) == 0) { // 表示这个mm没有其他进程共享了，可以清理掉
+            // 调用exit_mmap函数释放current->mm->vma链表中每个vma描述的进程合法空间中实际分配的内存
+            // 然后把对应的页表项内容清空，最后还把页表所占用的空间释放并把对应的页目录表项清空
             exit_mmap(mm);
-            put_pgdir(mm);
+            put_pgdir(mm); // 调用put_pgdir函数释放当前进程的页目录所占的内存
             mm_destroy(mm);
         }
-        current->mm = NULL;
+        current->mm = NULL;  // 已经不会再去用户态了
     }
-    current->state = PROC_ZOMBIE;
+    current->state = PROC_ZOMBIE;  // 搞到一半的属于僵尸进程状态，这个时候进程已经不能再被调度了
     current->exit_code = error_code;
     
     bool intr_flag;
     struct proc_struct *proc;
-    local_intr_save(intr_flag);
+    local_intr_save(intr_flag);  // 这是一个loop
     {
-        proc = current->parent;
-        if (proc->wait_state == WT_CHILD) {
-            wakeup_proc(proc);
+        proc = current->parent;  // 找到父进程
+        if (proc->wait_state == WT_CHILD) {  // 如果父进程的状态是等待
+            wakeup_proc(proc);  // 则唤醒父进程等待父进程回收自己
         }
         while (current->cptr != NULL) {
+            // 如果当前进程还有子进程，一般父进程是不能先于子进程退出的
+            // 则需要将当前子进程的父进程设置为initmain
             proc = current->cptr;
             current->cptr = proc->optr;
     
@@ -487,7 +492,7 @@ do_exit(int error_code) {
             initproc->cptr = proc;
             if (proc->state == PROC_ZOMBIE) {
                 if (initproc->wait_state == WT_CHILD) {
-                    wakeup_proc(initproc);
+                    wakeup_proc(initproc);  // 如果某个子进程的状态是僵尸，则需要唤醒proc来清理
                 }
             }
         }
@@ -502,6 +507,7 @@ do_exit(int error_code) {
  * @binary:  the memory addr of the content of binary program
  * @size:  the size of the content of binary program
  */
+// 加载器的工作，加载hello的磁盘镜像到内存中来
 static int
 load_icode(unsigned char *binary, size_t size) {
     if (current->mm != NULL) {
@@ -511,11 +517,11 @@ load_icode(unsigned char *binary, size_t size) {
     int ret = -E_NO_MEM;
     struct mm_struct *mm;
     //(1) create a new mm for current process
-    if ((mm = mm_create()) == NULL) {
+    if ((mm = mm_create()) == NULL) {  // 这个进程要去用户态，所以要重新创建一个新的mm
         goto bad_mm;
     }
     //(2) create a new PDT, and mm->pgdir= kernel virtual addr of PDT
-    if (setup_pgdir(mm) != 0) {
+    if (setup_pgdir(mm) != 0) {  // 用户进程要有自己单独的页表了，拷贝了内核映射的这一部分
         goto bad_pgdir_cleanup_mm;
     }
     //(3) copy TEXT/DATA section, build BSS parts in binary to memory space of process
@@ -523,7 +529,7 @@ load_icode(unsigned char *binary, size_t size) {
     //(3.1) get the file header of the bianry program (ELF format)
     struct elfhdr *elf = (struct elfhdr *)binary;
     //(3.2) get the entry of the program section headers of the bianry program (ELF format)
-    struct proghdr *ph = (struct proghdr *)(binary + elf->e_phoff);
+    struct proghdr *ph = (struct proghdr *)(binary + elf->e_phoff);  // program header
     //(3.3) This program is valid?
     if (elf->e_magic != ELF_MAGIC) {
         ret = -E_INVAL_ELF;
@@ -532,6 +538,8 @@ load_icode(unsigned char *binary, size_t size) {
 
     uint32_t vm_flags, perm;
     struct proghdr *ph_end = ph + elf->e_phnum;
+
+    // 将elf文件中所有需要load的部program section全部加载进来
     for (; ph < ph_end; ph ++) {
     //(3.4) find every program section headers
         if (ph->p_type != ELF_PT_LOAD) {
@@ -550,6 +558,8 @@ load_icode(unsigned char *binary, size_t size) {
         if (ph->p_flags & ELF_PF_W) vm_flags |= VM_WRITE;
         if (ph->p_flags & ELF_PF_R) vm_flags |= VM_READ;
         if (vm_flags & VM_WRITE) perm |= PTE_W;
+
+        // 分配虚拟内存空间的过程，虚拟的内存也是资源啊
         if ((ret = mm_map(mm, ph->p_va, ph->p_memsz, vm_flags, NULL)) != 0) {
             goto bad_cleanup_mmap;
         }
@@ -563,6 +573,7 @@ load_icode(unsigned char *binary, size_t size) {
         end = ph->p_va + ph->p_filesz;
      //(3.6.1) copy TEXT/DATA section of bianry program
         while (start < end) {
+            // 分配一个物理页框，并且在页表项中给予记录
             if ((page = pgdir_alloc_page(mm->pgdir, la, perm)) == NULL) {
                 goto bad_cleanup_mmap;
             }
@@ -570,6 +581,7 @@ load_icode(unsigned char *binary, size_t size) {
             if (end < la) {
                 size -= la - end;
             }
+            // 拷贝物理页
             memcpy(page2kva(page) + off, from, size);
             start += size, from += size;
         }
@@ -602,6 +614,10 @@ load_icode(unsigned char *binary, size_t size) {
         }
     }
     //(4) build user stack memory
+    // 需要给用户进程设置用户栈
+    // 为此调用mm_mmap函数建立用户栈的vma结构，明确用户栈的位置在用户虚空间的顶端，大小为256个页，即1MB
+    // 并分配一定数量的物理内存且建立好栈的虚地址<-->物理地址映射关系
+    // #define USERTOP             0xB0000000
     vm_flags = VM_READ | VM_WRITE | VM_STACK;
     if ((ret = mm_map(mm, USTACKTOP - USTACKSIZE, USTACKSIZE, vm_flags, NULL)) != 0) {
         goto bad_cleanup_mmap;
@@ -619,7 +635,7 @@ load_icode(unsigned char *binary, size_t size) {
 
     //(6) setup trapframe for user environment
     struct trapframe *tf = current->tf;
-    memset(tf, 0, sizeof(struct trapframe));
+    memset(tf, 0, sizeof(struct trapframe));  // 将之前内核栈顶的中断帧清0
     /* LAB5:EXERCISE1 YOUR CODE
      * should set tf_cs,tf_ds,tf_es,tf_ss,tf_esp,tf_eip,tf_eflags
      * NOTICE: If we set trapframe correctly, then the user level process can return to USER MODE from kernel. So
@@ -629,6 +645,9 @@ load_icode(unsigned char *binary, size_t size) {
      *          tf_eip should be the entry point of this binary program (elf->e_entry)
      *          tf_eflags should be set to enable computer to produce Interrupt
      */
+
+    // 现在实际上还是在处理中断的，syscall是中断处理例程中的一类，系统调用都是中断实现的
+    // 现在准备要离开内核，去用户态执行了，所以中断帧上的内容要修改，使得iret之后能够跳转到用户态执行
     tf->tf_cs = USER_CS;
     tf->tf_ds = tf->tf_es = tf->tf_ss = USER_DS;
     tf->tf_esp = USTACKTOP;
@@ -673,7 +692,7 @@ do_execve(const char *name, size_t len, unsigned char *binary, size_t size) {
         current->mm = NULL;
     }
     int ret;
-    if ((ret = load_icode(binary, size)) != 0) {
+    if ((ret = load_icode(binary, size)) != 0) {  // 加载应用程序代码，涉及elf文件的加载
         goto execve_exit;
     }
     set_proc_name(current, local_name);
@@ -707,7 +726,7 @@ do_wait(int pid, int *code_store) {
     bool intr_flag, haskid;
 repeat:
     haskid = 0;
-    if (pid != 0) {
+    if (pid != 0) { // 找一个指定pid的僵尸进程
         proc = find_proc(pid);
         if (proc != NULL && proc->parent == current) {
             haskid = 1;
@@ -716,7 +735,7 @@ repeat:
             }
         }
     }
-    else {
+    else {  // 在所有子进程中找任意一个僵尸进程
         proc = current->cptr;
         for (; proc != NULL; proc = proc->optr) {
             haskid = 1;
@@ -750,7 +769,7 @@ found:
     }
     local_intr_restore(intr_flag);
     put_kstack(proc);
-    kfree(proc);
+    kfree(proc);  // 彻底释放了就
     return 0;
 }
 
@@ -784,8 +803,8 @@ kernel_execve(const char *name, unsigned char *binary, size_t size) {
 }
 
 #define __KERNEL_EXECVE(name, binary, size) ({                          \
-            cprintf("kernel_execve: pid = %d, name = \"%s\".\n",        \
-                    current->pid, name);                                \
+            cprintf("kernel_execve: pid = %d, name = \"%s\", binary = %x, size = %d.\n",        \
+                    current->pid, name, binary, size);                                \
             kernel_execve(name, binary, (size_t)(size));                \
         })
 
@@ -809,7 +828,8 @@ user_main(void *arg) {
 #ifdef TEST
     KERNEL_EXECVE2(TEST, TESTSTART, TESTSIZE);
 #else
-    KERNEL_EXECVE(exit);
+    //KERNEL_EXECVE(exit);
+    KERNEL_EXECVE(hello);
 #endif
     panic("user_main execve failed.\n");
 }

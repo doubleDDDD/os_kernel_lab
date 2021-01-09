@@ -537,7 +537,7 @@ failed:
 bool
 user_mem_check(struct mm_struct *mm, uintptr_t addr, size_t len, bool write) {
     if (mm != NULL) {
-        if (!USER_ACCESS(addr, addr + len)) {
+        if (!USER_ACCESS(addr, addr + len)) {  // 就是去比较user_base与user_top
             return 0;
         }
         struct vma_struct *vma;

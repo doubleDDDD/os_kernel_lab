@@ -90,8 +90,8 @@ syscall(void) {
             arg[2] = tf->tf_regs.reg_ebx;
             arg[3] = tf->tf_regs.reg_edi;
             arg[4] = tf->tf_regs.reg_esi;
-            tf->tf_regs.reg_eax = syscalls[num](arg);
-            return ;
+            tf->tf_regs.reg_eax = syscalls[num](arg);  // 这里保存的是函数的地址
+            return;
         }
     }
     print_trapframe(tf);
